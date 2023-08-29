@@ -1,0 +1,1 @@
+data/datasus/SP_standardized_1996_2019.csv filter=lfs diff=lfs merge=lfs -text
