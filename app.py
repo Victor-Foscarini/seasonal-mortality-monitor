@@ -643,8 +643,11 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     # Define a color mapping for SEX values
     color_mapping = {'Male': 'blue', 'Female': 'red'}
 
+    #Rename AGE_AXIS
+    data = data.rename(columns={'AGE_AXIS':'AGE'})
+
     # Create the bar plot
-    fig = px.bar(data, x='RACECOLOR', y='AGE_AXIS', color='SEX',
+    fig = px.bar(data, x='RACECOLOR', y='AGE', color='SEX',
                  color_discrete_map=color_mapping,
                  hover_data=['SEX', 'RACECOLOR', 'AVERAGE_AGE'], barmode='group')
 
