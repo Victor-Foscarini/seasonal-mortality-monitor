@@ -687,4 +687,5 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=8000)
+    #app.run_server(debug=True, port=8000)
+    app.run_server(debug=False, host="0.0.0.0", port=8000)
