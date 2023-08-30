@@ -1,0 +1,12 @@
+[Unit]
+Description = Seasonal mortality monitor dashboard
+
+[Service]
+Type = simple
+ExecStart = /home/mmonitor/mortality-monitor-app/start.sh
+Restart = always
+WorkingDirectory = /home/mmonitor/mortality-monitor-app
+User = mmonitor
+
+[Install]
+WantedBy = multi-user.target
