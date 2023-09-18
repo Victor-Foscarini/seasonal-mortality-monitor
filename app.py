@@ -18,6 +18,8 @@ from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 #modelling time series
 from statsmodels.tsa.seasonal import seasonal_decompose
+#add images
+from PIL import Image
 
 data_path = 'data/'
 # n_causes = 50 #maximum number of causes to show on pie plots
@@ -146,9 +148,14 @@ locations = list(capital_to_uf.keys())
 ##STYLE DEFINITION
 app = Dash(__name__)
 app.config.external_stylesheets = [dbc.themes.BOOTSTRAP]
+app.title="SMM"
 
 app.layout = html.Div(
     [
+    html.Link(
+        rel="stylesheet",
+        href="/assets/custom.css"
+    ),
     html.Div(html.H1("Seasonal Mortality Monitor"),
              style={'textAlign':'center'}),
 
@@ -195,8 +202,7 @@ app.layout = html.Div(
     dbc.Row([dbc.Col(dcc.Graph(id='age-groups'), width={'size':6}, align='center'),
              dbc.Col(dcc.Graph(id='racecolor_sex-groups'), width={'size':6}, align='center')]),
 
-    ],
-)
+    ],className='custom-dashboard')
 
 ##CALLS
 dataManager = DataManager()
@@ -291,29 +297,32 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         title_text='Time Series and Moving Average n=12',
         title_font={'size':24},
         yaxis_title='Deaths/10k',
-        xaxis_title='Date',
+        xaxis_title='', #Date
         title_x=0.5)
 
-    # Create custom HTML annotations
-    annotations = [
-        dict(
-            x=-0.1, y=1.2,
-            xref="paper", yref="paper",
-            text="?",  # Icon or text you want to use
-            hovertext="The line plot depicts the time-series data for the chosen cause(s) <br>"+\
-                        "of death. The data is presented with age-adjusted population <br>"+\
-                        "standardization, using Brazil's age structure as the standard <br>"+\
-                        "population, so that it is possible to compare cities with <br>"+\
-                        "different age distributions. Additionaly, the Moving Average <br>"+\
-                        "reveals longer-term patterns based on the selected window <br>"+\
-                        "step size.",
-            font=dict(size=24),
-            showarrow=False,
-        )
-    ]
-    # Add the custom annotations to the plot
-    for annotation in annotations:
-        fig.add_annotation(annotation)
+    #question mark explaining the plot
+    image = Image.open("assets/question_mark_icon.png")
+    fig.add_annotation(
+        x=-0.1, y=1.2,
+        xref="paper", yref="paper",
+        text="     ",
+        hovertext="The line plot depicts the time-series data for the chosen cause(s) <br>"+\
+                    "of death. The data is presented with age-adjusted population <br>"+\
+                    "standardization, using Brazil's age structure as the standard <br>"+\
+                    "population, so that it is possible to compare cities with <br>"+\
+                    "different age distributions. Additionaly, the Moving Average <br>"+\
+                    "reveals longer-term patterns based on the selected window <br>"+\
+                    "step size.",
+        font=dict(size=24),
+        showarrow=False,
+    )
+    fig.add_layout_image(dict(
+        source=image,
+        xref="paper", yref="paper",
+        x=-0.1, y=1.2,
+        sizing="stretch",
+        sizex=.07, sizey=.14,
+    ))
 
     return fig
 
@@ -381,17 +390,25 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                         title_font={'size':28}, title_x=0.5, showlegend=False,)
 
     #question mark explaining the plot
+    image = Image.open("assets/question_mark_icon.png")
     fig.add_annotation(
-        x=0, y=1,
+        x=-0.04, y=1.15,
         xref="paper", yref="paper",
-        text="?",
+        text="      ",
         hovertext="The pie plots show the total deaths by cause, beaking down<br>"+\
                             "the causes of death in three levels according to the<br>"+\
                             "ICD-10 codes. The 1st level codes can be broken in 2nd<br>"+\
                             "level codes, which in turn can be broken in 3rd level codes.",
         font=dict(size=24),
-        showarrow=False
+        showarrow=False,
     )
+    fig.add_layout_image(dict(
+        source=image,
+        xref="paper", yref="paper",
+        x=-0.04, y=1.15,
+        sizing="stretch",
+        sizex=.035, sizey=.14,
+    ))
 
     return fig
 
@@ -458,13 +475,15 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                       height=800
                     )
 
-    fig.update_xaxes(title_text='Date')
+    fig.update_xaxes(title_text='Year')#Date
     fig.update_yaxes(title_text='Deaths/10k')
 
+    #question mark explaining the plot
+    image = Image.open("assets/question_mark_icon.png")
     fig.add_annotation(
-        x=-0.05, y=1.05,
+        x=-0.1, y=1.1,
         xref="paper", yref="paper",
-        text="?",  # Icon or text you want to use
+        text="     ",
         hovertext="We generated the decompostion plot using the python library <br>"+\
                     "statsmodels.tsa.seasonal.seasonal_decompose. The library <br>"+\
                     "does the decomposition with moving averages, breaking the <br>"+\
@@ -473,6 +492,13 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         font=dict(size=24),
         showarrow=False,
     )
+    fig.add_layout_image(dict(
+        source=image,
+        xref="paper", yref="paper",
+        x=-0.1, y=1.1,
+        sizing="stretch",
+        sizex=.08, sizey=.06,
+    ))
 
     return fig
 
@@ -497,12 +523,13 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     data = data.resample('D').sum()
 
     fig = make_subplots(rows=3, cols=1,
-                subplot_titles=('Deaths by year',
-                                'Deaths by month',
-                                'Deaths by weekday'))
+                subplot_titles=('Death rate by year',
+                                'Average death rate by month',
+                                'Average death rate by weekday'))
 
     #yearly
     year_mean = data.resample('AS').sum()
+    year_mean.index = year_mean.index.year
     fig.add_trace(go.Bar(
                     x=year_mean.index,
                     y=year_mean.COUNT_STANDARDIZED_BR,
@@ -510,7 +537,9 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                     row=1, col=1)
 
     #monthly
-    month_mean = data.groupby(data.index.month).sum()
+    #month_mean = data.groupby(data.index.month).sum()
+    month_mean = data.groupby(pd.Grouper(freq="M")).sum()
+    month_mean = month_mean.groupby(month_mean.index.month).mean()
     month_mean.index =  ['January', 'February', 'March', 'April', 'May',
                          'June', 'July', 'August', 'September', 'October',
                          'November', 'December']
@@ -521,7 +550,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                     row=2, col=1)
 
     #weekly
-    weekday_mean = data.groupby(data.index.weekday).sum()
+    weekday_mean = data.groupby(data.index.weekday).mean()
     weekday_mean.index =  ['Monday', 'Tuesday', 'Wednesday', 'Thursday',
                            'Friday', 'Saturday', 'Sunday']
 
@@ -541,13 +570,15 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                       height=800
                     )
 
-    fig.update_xaxes(title_text='Date')
+    fig.update_xaxes(title_text='')#Date
     fig.update_yaxes(title_text='Deaths/10k')
 
+    #question mark explaining the plot
+    image = Image.open("assets/question_mark_icon.png")
     fig.add_annotation(
-        x=-0.05, y=1.05,
+        x=-0.1, y=1.1,
         xref="paper", yref="paper",
-        text="?",  # Icon or text you want to use
+        text="      ",
         hovertext="To understand the variation of deaths over time, we group the <br>"+\
                     "data by year, month and weekday. This approach provides <br>"+\
                     "insights into the mortality trends associated with different <br>"+\
@@ -555,6 +586,13 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         font=dict(size=24),
         showarrow=False,
     )
+    fig.add_layout_image(dict(
+        source=image,
+        xref="paper", yref="paper",
+        x=-0.1, y=1.1,
+        sizing="stretch",
+        sizex=.08, sizey=.06,
+    ))
 
     return fig
 
@@ -578,24 +616,28 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     fig = px.bar(x=data.index.astype(str), y=data.values,
                  labels={'x':'Age group', 'y':'Deaths/10k'})
 
-    # Create custom HTML annotations
-    annotations = [
-        dict(
-            x=-0.15, y=1.25,
-            xref="paper", yref="paper",
-            text="?",  # Icon or text you want to use
-            hovertext="The histogram presents the total number of deaths within<br>"+\
-                        "each age bracket, divided by the total population <br>"+\
-                        "across all brackets. This highlights how many deaths <br>"+\
-                        "come from each age segment, rather than presenting <br>"+\
-                        "the mortality rate specific to that segment.",
-            font=dict(size=24),
-            showarrow=False,
-        )
-    ]
-    # Add the custom annotations to the plot
-    for annotation in annotations:
-        fig.add_annotation(annotation)
+
+    #question mark explaining the plot
+    image = Image.open("assets/question_mark_icon.png")
+    fig.add_annotation(
+        x=-0.15, y=1.35,
+        xref="paper", yref="paper",
+        text="      ",
+        hovertext="The histogram presents the total number of deaths within<br>"+\
+                    "each age bracket, divided by the total population <br>"+\
+                    "across all brackets. This highlights how many deaths <br>"+\
+                    "come from each age segment, rather than presenting <br>"+\
+                    "the mortality rate specific to that segment.",
+        font=dict(size=24),
+        showarrow=False,
+    )
+    fig.add_layout_image(dict(
+        source=image,
+        xref="paper", yref="paper",
+        x=-0.15, y=1.35,
+        sizing="stretch",
+        sizex=.078, sizey=.26,
+    ))
 
     fig.update_layout(
         title_text='Total deaths from each age group',
@@ -649,30 +691,36 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     # Create the bar plot
     fig = px.bar(data, x='RACECOLOR', y='AGE', color='SEX',
                  color_discrete_map=color_mapping,
-                 hover_data=['SEX', 'RACECOLOR', 'AVERAGE_AGE'], barmode='group')
+                 hover_data=['SEX', 'RACECOLOR', 'AVERAGE_AGE'], barmode='group',
+                 labels={'RACECOLOR':'Race/color',
+                         'AGE':'Age', 'SEX':'Sex'})
 
-    # Create custom HTML annotations
-    annotations = [
-        dict(
-            x=-0.15, y=1.25,
-            xref="paper", yref="paper",
-            text="?",  # Icon or text you want to use
-            hovertext="The histogram displays the average age of death by racecolor <br>"+\
-                        "and sex, considering the aggregated number of deaths of <br>"+\
-                        "every five years age group by racecolor and sex, and then <br>"+\
-                        "taking the weighted average of each group, where the weight <br>"+\
-                        "is the percentage population of an age group in Brazil.",
-            font=dict(size=24),
-            showarrow=False,
-        )
-    ]
-    # Add the custom annotations to the plot
-    for annotation in annotations:
-        fig.add_annotation(annotation)
+
+    #question mark explaining the plot
+    image = Image.open("assets/question_mark_icon.png")
+    fig.add_annotation(
+        x=-0.17, y=1.22,
+        xref="paper", yref="paper",
+        text="      ",
+        hovertext="The histogram displays the average age of death by racecolor <br>"+\
+                    "and sex, considering the aggregated number of deaths of <br>"+\
+                    "every five years age group by racecolor and sex, and then <br>"+\
+                    "taking the weighted average of each group, where the weight <br>"+\
+                    "is the percentage population of an age group in Brazil.",
+        font=dict(size=24),
+        showarrow=False,
+    )
+    fig.add_layout_image(dict(
+        source=image,
+        xref="paper", yref="paper",
+        x=-0.17, y=1.22,
+        sizing="stretch",
+        sizex=.085, sizey=.22,
+    ))
 
 
     # Update layout
-    fig.update_traces(hovertemplate='RACECOLOR: %{x}<br>SEX: %{customdata[0]}<br>AVERAGE_AGE: %{customdata[1]}')
+    fig.update_traces(hovertemplate='Race/color: %{x}<br>Sex: %{customdata[0]}<br>Age: %{customdata[1]}')
     fig.update_layout(
         title_text='Average age of death by racecolor and sex',
         title_font={'size': 24},
@@ -683,8 +731,10 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         margin=dict(t=50)  # Adjust top margin to make space for annotation
     )
 
-    return fig
+    # fig.update_xaxes(title_text='Race/Color')
+    # fig.update_yaxes(title_text='Age')
 
+    return fig
 
 if __name__ == '__main__':
     #app.run_server(debug=True, port=8000)
