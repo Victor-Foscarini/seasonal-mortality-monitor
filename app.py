@@ -174,9 +174,24 @@ app.layout = html.Div(
         href="/assets/custom.css"
     ),
     # Dashboard title
-    html.Div(html.H1("Seasonal Mortality Monitor"),
-             style={'textAlign':'center'}),
-
+    html.Div([
+        html.H1("Seasonal Mortality Monitor", style={'textAlign': 'center',
+                                                     'color':'black'}),##00998
+    html.Div([
+        html.A([
+            html.Abbr([
+                html.Img(src='/assets/isc_link.svg', style={'height': '50px', 'verticalAlign': 'middle', 'cursor':'pointer'}),
+            ], title="InterSCity page"),
+        ], href='https://interscity.org/', target='_blank'),
+        html.A([
+                html.Abbr([
+                    html.Img(src='/assets/about.png', style={'height': '50px', 'verticalAlign': 'middle', 'cursor':'pointer'}),
+                ], title="This dashboard was developed as part of Victor Foscarini Almeida's\n"+
+                          "master's degree project, under the supervision of Fabio Kon and\n"+
+                          "Raphael Camargo, and received financial support from FAPESP, CNPq, and CAPES."),
+        ], href='https://github.com/Victor-Foscarini/seasonal-mortality-monitor', target='_blank'),
+    ], style={'textAlign': 'center', 'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center', 'flexDirection': 'row'}),
+    ], style={'textAlign': 'center', 'display': 'flex', 'flexDirection': 'column', 'justifyContent': 'center', 'alignItems': 'center'}),
 
 
     dbc.Row([
