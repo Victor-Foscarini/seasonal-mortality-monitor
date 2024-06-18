@@ -1,9 +1,8 @@
 #To-Do:
-##add total count instead of just percentage
 ##fix the problem of deleting a code of a higher level that contains a chosen code of a lower level
 ##fix problem of having to process data in every new callback (either with Store or with DataManager), it has a delay if i dont
 ##show only year in deaths by year and not Jan-Year
-##add all-Brazil option
+##add all Brazil, states and cities
 
 #plotting
 import plotly.express as px
@@ -32,6 +31,10 @@ capital_to_uf = {'Rio Branco - AC': 'AC', 'Maceió - AL': 'AL', 'Manaus - AM': '
                      'Natal - RN': 'RN', 'Porto Velho - RO': 'RO', 'Boa Vista - RR': 'RR', 'Porto Alegre - RS': 'RS',
                      'Florianópolis - SC': 'SC', 'Aracaju - SE': 'SE', 'São Paulo - SP': 'SP', 'Palmas - TO': 'TO'}
 
+selection_dataformat = {'Absolute Count':'DEATH_COUNT',
+                        'Rate (Deaths/100k)': 'DEATH_RATE',}
+                        #'Standardized Death Rate (Deaths/100k)': 'DEATHS_STANDARDIZED_BR'}
+
 #Selections are of the shape {'I21: Acute myocardyal infarction':'I21'}
 icd = pd.read_csv(f'{data_path}icd_codes.csv')
 selection_3lvl = list(icd['code_3lvl']+': '+icd['name_3lvl'])
@@ -55,13 +58,17 @@ selection_age = {'(0, 5]': pd.Interval(0, 5, closed='right'), '(5, 10]': pd.Inte
 
 class DataManager:
 
+    # death_column = 'DEATH_COUNT'
+
     def __init__(self):
     #initialize dashboard in SÃO PAULO
+        self.data_column = 'DEATH_COUNT'
         self.df = pd.read_csv(f'{data_path}datasus/SP_standardized_1996_2022.csv')
         self.df = self.df.dropna() # for now, dop null values
         self.df.CAUSE = self.df.CAUSE.str[:3] #for now, preprocess the lenght of causes here
         self.df['DT'] = pd.to_datetime(self.df.DT)
-        self.df = self.df[self.df.DT.dt.year>=2000] #Only 2000+
+        # self.df = self.df[(self.df.DT.dt.year>=2000)&(self.df.DT.dt.year<=2019)]
+        self.df = self.df[(self.df.DT.dt.year>=2000)]
         self.df['AGE'] = self.df['AGE'].apply(lambda x: pd.Interval(*map(float, x.strip('[]()').split(','))))
         self.data = self.df.copy()
         self.city = 'São Paulo - SP'
@@ -94,6 +101,10 @@ class DataManager:
         else:
             self.data = self.df.copy()
             self.icd = icd
+
+    # 1 - Dataformat selection
+    def select_dataformat(self, dataformat='DEATH_COUNT'):
+        self.death_column = selection_dataformat[dataformat]
 
     # 2 - Cause selection (1st level)
     def select_causes_1lvl(self, values_selected_causes_1lvl):
@@ -162,11 +173,15 @@ app.layout = html.Div(
         rel="stylesheet",
         href="/assets/custom.css"
     ),
+    # Dashboard title
     html.Div(html.H1("Seasonal Mortality Monitor"),
              style={'textAlign':'center'}),
 
+
+
     dbc.Row([
     dbc.Col([
+
         #location selection
         dbc.Row(dbc.Col(html.Label(['City:'], style={'font-weight': 'bold', 'text-align': 'center'}))),
         dbc.Row(dbc.Col(dbc.Row(dbc.Col(dcc.Dropdown(
@@ -176,6 +191,17 @@ app.layout = html.Div(
                                     multi=False,
                                     searchable=True,
                                     placeholder='Please select city',
+                                    style={'width':'100%'}))))),
+
+        #dataformat selection
+        dbc.Row(dbc.Col(html.Label(['Deaths Format:'], style={'font-weight': 'bold', 'text-align': 'center'}))),
+        dbc.Row(dbc.Col(dbc.Row(dbc.Col(dcc.Dropdown(
+                                    id='dataformat_dropdown',
+                                    options=[{'label': loc, 'value': loc} for loc in selection_dataformat],
+                                    value='Absolute Count',
+                                    multi=False,
+                                    searchable=True,
+                                    placeholder='Please select a data format',
                                     style={'width':'100%'}))))),
 
         # 1lvl code
@@ -213,14 +239,15 @@ app.layout = html.Div(
 ##CALLS
 dataManager = DataManager()
 
-
 #1lvl dropdown
 @app.callback(
     Output('1lvlcode_dropdown', 'options'),
-    Input('location_dropdown', 'value'),
+    [Input('location_dropdown', 'value'),
+     Input('dataformat_dropdown', 'value')]
 )
-def set_1vl_dropdown(location_data):
+def set_1vl_dropdown(location_data, dataformat_data):
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     options = [{'label': loc, 'value': loc} for loc in selection_1lvl]
     return options
 
@@ -228,10 +255,12 @@ def set_1vl_dropdown(location_data):
 @app.callback(
     Output('2lvlcode_dropdown', 'options'),
     [Input('location_dropdown', 'value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown', 'value')]
 )
-def set_2vl_dropdown(location_data, code1lvl_data):
+def set_2vl_dropdown(location_data, dataformat_data, code1lvl_data):
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     dataManager.select_causes_1lvl(code1lvl_data)
     options = [{'label': loc, 'value': loc} for loc in dataManager.keys_selected_causes_2lvl]
     return options
@@ -240,11 +269,13 @@ def set_2vl_dropdown(location_data, code1lvl_data):
 @app.callback(
     Output('3lvlcode_dropdown', 'options'),
     [Input('location_dropdown', 'value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown', 'value'),
      Input('2lvlcode_dropdown', 'value')]
 )
-def set_3vl_dropdown(location_data, code1lvl_data, code2lvl_data):
+def set_3vl_dropdown(location_data, dataformat_data, code1lvl_data, code2lvl_data):
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     dataManager.select_causes_1lvl(code1lvl_data)
     dataManager.select_causes_2lvl(code2lvl_data)
     options = [{'label': loc, 'value': loc} for loc in dataManager.keys_selected_causes_3lvl]
@@ -254,29 +285,31 @@ def set_3vl_dropdown(location_data, code1lvl_data, code2lvl_data):
 @app.callback(
     Output('time_series','figure'),
     [Input('location_dropdown','value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown','value'),
      Input('2lvlcode_dropdown','value'),
      Input('3lvlcode_dropdown', 'value')],
 )
-def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
+def update_plot(location_data, dataformat_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     dataManager.select_causes_1lvl(code1lvl_data)
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
-    data = dataManager.data[['DT', 'DEATHS_STANDARDIZED_BR']]
+    data = dataManager.data[['DT', dataManager.death_column]]
     data = data.groupby(by='DT').sum()
     data = data.resample('MS').sum()
 
     fig = go.Figure()
     #original TS
-    fig.add_trace(go.Scatter(x=data.index, y=data.DEATHS_STANDARDIZED_BR, name='Original'))
+    fig.add_trace(go.Scatter(x=data.index, y=data[dataManager.death_column], name='Absolute'))
     #MA-TS
     for step in np.arange(1,25,1):
       fig.add_trace(
           go.Scatter(visible=False,
                     x=data.index,
-                    y=data.DEATHS_STANDARDIZED_BR.rolling(step).mean(), name='MA n='+str(step),
+                    y=data[dataManager.death_column].rolling(step).mean(), name='MA n='+str(step),
                     line=dict(color='red', width=2, dash='dash')))
 
     #start on step-12
@@ -294,7 +327,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     sliders = [dict(
         active=12,
-        currentvalue={"prefix": "n= "},
+        currentvalue={"prefix": "Moving Average: "},
         steps=steps
     )]
 
@@ -302,7 +335,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         sliders=sliders,
         title_text='Time Series and Moving Average n=12',
         title_font={'size':24},
-        yaxis_title='Deaths/10k',
+        yaxis_title='Deaths',
         xaxis_title='', #Date
         title_x=0.5)
 
@@ -312,13 +345,17 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         x=-0.1, y=1.2,
         xref="paper", yref="paper",
         text="     ",
-        hovertext="The line plot depicts the time-series data for the chosen cause(s) <br>"+\
-                    "of death. The data is presented with age-adjusted population <br>"+\
-                    "standardization, using Brazil's age structure as the standard <br>"+\
-                    "population, so that it is possible to compare cities with <br>"+\
-                    "different age distributions. Additionaly, the Moving Average <br>"+\
+        hovertext="The line plot depicts the time-series mortality data for the <br>"+\
+                    "chosen causes of death. Additionaly, the Moving Average <br>"+\
                     "reveals longer-term patterns based on the selected window <br>"+\
                     "step size.",
+        # hovertext="The line plot depicts the time-series data for the chosen cause(s) <br>"+\
+        #             "of death. The data is presented with age-adjusted population <br>"+\
+        #             "standardization, using Brazil's age structure as the standard <br>"+\
+        #             "population, so that it is possible to compare cities with <br>"+\
+        #             "different age distributions. Additionaly, the Moving Average <br>"+\
+        #             "reveals longer-term patterns based on the selected window <br>"+\
+        #             "step size.",
         font=dict(size=24),
         showarrow=False,
     )
@@ -336,24 +373,26 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 @app.callback(
     Output('pie','figure'),
     [Input('location_dropdown','value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown','value'),
      Input('2lvlcode_dropdown','value'),
      Input('3lvlcode_dropdown', 'value')],
 )
-def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
+def update_plot(location_data, dataformat_data, code1lvl_data, code2lvl_data, code3lvl_data):
     #superior figure
     fig = make_subplots(rows=1, cols=3, specs=[[{"type": "pie"}, {"type": "pie"}, {"type": "pie"}]],
                         subplot_titles=('1st level', '2nd level', '3rd level'))
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
 
     #1lvl pieplot
     dataManager.select_causes_1lvl(code1lvl_data)
-    data = dataManager.data[['CAUSE', 'DEATHS_STANDARDIZED_BR']][dataManager.data.CAUSE!='ALL'].groupby(
+    data = dataManager.data[['CAUSE', dataManager.death_column]][dataManager.data.CAUSE!='ALL'].groupby(
             by='CAUSE').sum().reset_index()
     data = data.merge(dataManager.icd[['code_3lvl','code_1lvl', 'name_1lvl']], left_on='CAUSE',
                     right_on='code_3lvl').drop(columns=['CAUSE','code_3lvl'])
     data = data.groupby(by=['code_1lvl', 'name_1lvl']).sum().reset_index()
-    data = data.rename(columns={'code_1lvl': 'Code', 'name_1lvl': 'Name', 'DEATHS_STANDARDIZED_BR': 'Deaths(%)'})
+    data = data.rename(columns={'code_1lvl': 'Code', 'name_1lvl': 'Name', dataManager.death_column: 'Deaths(%)'})
     data = data.sort_values(by='Deaths(%)', ascending=False)#[:n_causes]
     data['Deaths(%)'] = data['Deaths(%)']/data['Deaths(%)'].sum()
     data['Deaths(%)'] = data['Deaths(%)'].round(4)
@@ -364,12 +403,12 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     #2lvl pieplot
     dataManager.select_causes_2lvl(code2lvl_data)
-    data = dataManager.data[['CAUSE', 'DEATHS_STANDARDIZED_BR']][dataManager.data.CAUSE!='ALL'].groupby(
+    data = dataManager.data[['CAUSE', dataManager.death_column]][dataManager.data.CAUSE!='ALL'].groupby(
             by='CAUSE').sum().reset_index()
     data = data.merge(dataManager.icd[['code_3lvl','code_2lvl', 'name_2lvl']], left_on='CAUSE',
                   right_on='code_3lvl').drop(columns=['CAUSE','code_3lvl'])
     data = data.groupby(by=['code_2lvl', 'name_2lvl']).sum().reset_index()
-    data = data.rename(columns={'code_2lvl': 'Code', 'name_2lvl': 'Name', 'DEATHS_STANDARDIZED_BR': 'Deaths(%)'})
+    data = data.rename(columns={'code_2lvl': 'Code', 'name_2lvl': 'Name', dataManager.death_column: 'Deaths(%)'})
     data = data.sort_values(by='Deaths(%)', ascending=False)#[:n_causes]
     data['Deaths(%)'] = (data['Deaths(%)']/data['Deaths(%)'].sum())#*100
     data['Deaths(%)'] = data['Deaths(%)'].round(4)
@@ -380,7 +419,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     #3lvl pieplot
     dataManager.select_causes_3lvl(code3lvl_data)
-    data = dataManager.data[['CAUSE', 'DEATHS_STANDARDIZED_BR']][dataManager.data.CAUSE!='ALL'].groupby(
+    data = dataManager.data[['CAUSE', dataManager.death_column]][dataManager.data.CAUSE!='ALL'].groupby(
             by='CAUSE').sum().reset_index()
     data = data.merge(dataManager.icd[['code_3lvl', 'name_3lvl']], left_on='CAUSE', right_on='code_3lvl').drop(columns='CAUSE')
     data.columns = ['Deaths(%)', 'Code', 'Name']
@@ -401,10 +440,10 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         x=-0.04, y=1.15,
         xref="paper", yref="paper",
         text="      ",
-        hovertext="The pie plots show the total deaths by cause, beaking down<br>"+\
-                            "the causes of death in three levels according to the<br>"+\
-                            "ICD-10 codes. The 1st level codes can be broken in 2nd<br>"+\
-                            "level codes, which in turn can be broken in 3rd level codes.",
+        hovertext="The pie plots shows the percentage of deaths by cause, beaking down<br>"+\
+                    "the causes of death in three levels according to the<br>"+\
+                    "ICD-10 codes. The 1st level codes can be broken in 2nd<br>"+\
+                    "level codes, which in turn can be broken in 3rd level codes.",
         font=dict(size=24),
         showarrow=False,
     )
@@ -423,18 +462,20 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 @app.callback(
     Output('decomposition','figure'),
     [Input('location_dropdown','value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown','value'),
      Input('2lvlcode_dropdown','value'),
      Input('3lvlcode_dropdown', 'value')],
 )
-def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
+def update_plot(location_data, dataformat_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     dataManager.select_causes_1lvl(code1lvl_data)
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['DT', 'DEATHS_STANDARDIZED_BR']]
+    data = dataManager.data[['DT', dataManager.death_column]]
     data = data.groupby(by='DT').sum()
     data = data.resample('MS').sum()
 
@@ -470,8 +511,6 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     fig.add_hline(y=0, row=4, col=1, line_color='#000000')
 
-
-
     fig.update_layout(showlegend=False,
                       title_text='Decomposition',
                       title_font= {'size':30},
@@ -482,7 +521,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                     )
 
     fig.update_xaxes(title_text='Year')#Date
-    fig.update_yaxes(title_text='Deaths/10k')
+    fig.update_yaxes(title_text='Deaths')
 
     #question mark explaining the plot
     image = Image.open("assets/question_mark_icon.png")
@@ -490,11 +529,9 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         x=-0.1, y=1.1,
         xref="paper", yref="paper",
         text="     ",
-        hovertext="We generated the decompostion plot using the python library <br>"+\
-                    "statsmodels.tsa.seasonal.seasonal_decompose. The library <br>"+\
-                    "does the decomposition with moving averages, breaking the <br>"+\
-                    "original time series in a trend component, a seasonal <br>"+\
-                    "component, and the model's residuals.",
+        hovertext="We generate the decomposition plot using with moving averages, <br>"+\
+                    "breaking the original time series in a trend component, <br>"+\
+                    "a seasonal component, and the model's residuals. <br>",
         font=dict(size=24),
         showarrow=False,
     )
@@ -513,32 +550,34 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 @app.callback(
     Output('seasonality','figure'),
     [Input('location_dropdown','value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown','value'),
      Input('2lvlcode_dropdown','value'),
      Input('3lvlcode_dropdown', 'value')],
 )
-def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
+def update_plot(location_data, dataformat_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     dataManager.select_causes_1lvl(code1lvl_data)
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['DT', 'DEATHS_STANDARDIZED_BR']]
+    data = dataManager.data[['DT', dataManager.death_column]]
     data = data.groupby(by='DT').sum()
     data = data.resample('D').sum()
 
     fig = make_subplots(rows=3, cols=1,
-                subplot_titles=('Death rate by year',
-                                'Average death rate by month',
-                                'Average death rate by weekday'))
+                subplot_titles=('Deaths by year',
+                                'Average deaths by month',
+                                'Average deaths by weekday'))
 
     #yearly
     year_mean = data.resample('AS').sum()
     year_mean.index = year_mean.index.year
     fig.add_trace(go.Bar(
                     x=year_mean.index,
-                    y=year_mean.DEATHS_STANDARDIZED_BR,
+                    y=year_mean[dataManager.death_column],
                     name='year'),
                     row=1, col=1)
 
@@ -551,7 +590,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                          'November', 'December']
     fig.add_trace(go.Bar(
                     x=month_mean.index,
-                    y=month_mean.DEATHS_STANDARDIZED_BR,
+                    y=month_mean[dataManager.death_column],
                     name='month'),
                     row=2, col=1)
 
@@ -562,7 +601,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     fig.add_trace(go.Bar(
                     x=weekday_mean.index,
-                    y=weekday_mean.DEATHS_STANDARDIZED_BR,
+                    y=weekday_mean[dataManager.death_column],
                     name='weekday'),
                     row=3, col=1)
 
@@ -577,7 +616,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                     )
 
     fig.update_xaxes(title_text='')#Date
-    fig.update_yaxes(title_text='Deaths/10k')
+    fig.update_yaxes(title_text='Deaths')
 
     #question mark explaining the plot
     image = Image.open("assets/question_mark_icon.png")
@@ -606,21 +645,23 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 @app.callback(
     Output('age-groups','figure'),
     [Input('location_dropdown','value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown','value'),
      Input('2lvlcode_dropdown','value'),
      Input('3lvlcode_dropdown', 'value')],
 )
-def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
+def update_plot(location_data, dataformat_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     dataManager.select_causes_1lvl(code1lvl_data)
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['AGE', 'DEATHS_STANDARDIZED_BR']].groupby(by='AGE').sum()['DEATHS_STANDARDIZED_BR']
+    data = dataManager.data[['AGE', dataManager.death_column]].groupby(by='AGE').sum()[dataManager.death_column]
 
     fig = px.bar(x=data.index.astype(str), y=data.values,
-                 labels={'x':'Age group', 'y':'Deaths/10k'})
+                 labels={'x':'Age group', 'y':'Deaths'})
 
 
     #question mark explaining the plot
@@ -629,11 +670,13 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         x=-0.15, y=1.35,
         xref="paper", yref="paper",
         text="      ",
-        hovertext="The histogram presents the total number of deaths within<br>"+\
-                    "each age bracket, divided by the total population <br>"+\
-                    "across all brackets. This highlights how many deaths <br>"+\
-                    "come from each age segment, rather than presenting <br>"+\
-                    "the mortality rate specific to that segment.",
+        # hovertext="The histogram presents the total number of deaths within<br>"+\
+        #             "each age bracket, divided by the total population <br>"+\
+        #             "across all brackets. This highlights how many deaths <br>"+\
+        #             "come from each age segment, rather than presenting <br>"+\
+        #             "the mortality rate specific to that segment.",
+        hovertext="The histogram presents the total number of deaths<br>"+\
+                    "within each age bracket.",
         font=dict(size=24),
         showarrow=False,
     )
@@ -659,74 +702,61 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 @app.callback(
     Output('racecolor_sex-groups','figure'),
     [Input('location_dropdown','value'),
+     Input('dataformat_dropdown', 'value'),
      Input('1lvlcode_dropdown','value'),
      Input('2lvlcode_dropdown','value'),
      Input('3lvlcode_dropdown', 'value')],
 )
-def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
+def update_plot(location_data, dataformat_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     dataManager.read_data(location_data)
+    dataManager.select_dataformat(dataformat_data)
     dataManager.select_causes_1lvl(code1lvl_data)
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['AGE', 'SEX', 'RACECOLOR', 'DEATHS_STANDARDIZED_BR']]
+    data = dataManager.data[['AGE', 'SEX', 'RACECOLOR', dataManager.death_column]]
 
     interval = data.AGE.unique()
     data['AGE'] = data.AGE.astype(str).str.extract(r'\((\d+)').astype(int)+2.5
-    data['AGE'] = data.AGE*data.DEATHS_STANDARDIZED_BR
-    data = data.groupby(['SEX', 'RACECOLOR']).agg({'AGE':'sum', 'DEATHS_STANDARDIZED_BR': 'sum'})
-    data['AVERAGE_AGE'] = data['AGE']/data['DEATHS_STANDARDIZED_BR']
-    data['AVERAGE_AGE'] = (data['AVERAGE_AGE']//5)*5
-    data['AVERAGE_AGE_INTERVAL'] = data['AVERAGE_AGE'].apply(lambda x: pd.Interval(left=x, right=x+5))
-    data['AVERAGE_AGE_INTERVAL'] = data['AVERAGE_AGE_INTERVAL'].astype(str)
-    data = data[['AVERAGE_AGE', 'AVERAGE_AGE_INTERVAL']].reset_index()
+    data['AGE'] = data.AGE*data[dataManager.death_column]
+    data = data.groupby(['SEX', 'RACECOLOR']).agg({'AGE':'sum', dataManager.death_column: 'sum'})
+    data['AVERAGE_AGE'] = data['AGE']/data[dataManager.death_column]
+    data['AVERAGE_AGE'] = data['AVERAGE_AGE'].round(2)
+    # data['AVERAGE_AGE'] = (data['AVERAGE_AGE']//5)*5
+    # data['AVERAGE_AGE_INTERVAL'] = data['AVERAGE_AGE'].apply(lambda x: pd.Interval(left=x, right=x+5))
+    # data['AVERAGE_AGE_INTERVAL'] = data['AVERAGE_AGE_INTERVAL'].astype(str)
+    # data = data[['AVERAGE_AGE', 'AVERAGE_AGE_INTERVAL']].reset_index()
+    data = data['AVERAGE_AGE'].reset_index()
 
-    data = data.rename(columns={'SEX': 'SEX', 'RACECOLOR': 'RACECOLOR',
-                                'AVERAGE_AGE_INTERVAL': 'AVERAGE_AGE', 'AVERAGE_AGE':'AGE_AXIS'})
+    # data = data.rename(columns={'SEX': 'SEX', 'RACECOLOR': 'RACECOLOR',
+    #                             'AVERAGE_AGE_INTERVAL': 'AVERAGE_AGE', 'AVERAGE_AGE':'AGE_AXIS'})
 
-    data['AVERAGE_AGE'] = data['AVERAGE_AGE'].astype(str)  # Convert intervals to strings
+
+    # data['AVERAGE_AGE'] = data['AVERAGE_AGE'].astype(str)  # Convert intervals to strings
     data['SEX'] = data['SEX'].astype(str)  # Convert intervals to strings
 
     # Define a color mapping for SEX values
     color_mapping = {'Male': 'blue', 'Female': 'red'}
 
     #Rename AGE_AXIS
-    data = data.rename(columns={'AGE_AXIS':'AGE'})
+    # data = data.rename(columns={'AGE_AXIS':'AGE'})
+    # data = data.rename(columns={'AVERAGE_AGE':'AGE'})
 
     # Create the bar plot
-    fig = px.bar(data, x='RACECOLOR', y='AGE', color='SEX',
+    fig = px.bar(data, x='RACECOLOR', y='AVERAGE_AGE', color='SEX',
                  color_discrete_map=color_mapping,
                  hover_data=['SEX', 'RACECOLOR', 'AVERAGE_AGE'], barmode='group',
                  labels={'RACECOLOR':'Race/color',
-                         'AGE':'Age', 'SEX':'Sex'})
-
-
-    #question mark explaining the plot
-    image = Image.open("assets/question_mark_icon.png")
-    fig.add_annotation(
-        x=-0.17, y=1.22,
-        xref="paper", yref="paper",
-        text="      ",
-        hovertext="The histogram displays the average age of death by racecolor <br>"+\
-                    "and sex, considering the aggregated number of deaths of <br>"+\
-                    "every five years age group by racecolor and sex, and then <br>"+\
-                    "taking the weighted average of each group, where the weight <br>"+\
-                    "is the percentage population of an age group in Brazil.",
-        font=dict(size=24),
-        showarrow=False,
-    )
-    fig.add_layout_image(dict(
-        source=image,
-        xref="paper", yref="paper",
-        x=-0.17, y=1.22,
-        sizing="stretch",
-        sizex=.085, sizey=.22,
-    ))
-
+                         'AVERAGE_AGE':'Age', 'SEX':'Sex'})
+    # fig = px.bar(data, x='RACECOLOR', y='AGE', color='SEX',
+    #              color_discrete_map=color_mapping,
+    #              hover_data=['SEX', 'RACECOLOR', 'AVERAGE_AGE'], barmode='group',
+    #              labels={'RACECOLOR':'Race/color',
+    #                      'AGE':'Age', 'SEX':'Sex'})
 
     # Update layout
-    fig.update_traces(hovertemplate='Race/color: %{x}<br>Sex: %{customdata[0]}<br>Age: %{customdata[1]}')
+    fig.update_traces(hovertemplate='Race/color: %{x}<br>Sex: %{customdata[0]}<br>Age: %{y}')
     fig.update_layout(
         title_text='Average age of death by racecolor and sex',
         title_font={'size': 24},
@@ -737,8 +767,30 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
         margin=dict(t=50)  # Adjust top margin to make space for annotation
     )
 
-    # fig.update_xaxes(title_text='Race/Color')
-    # fig.update_yaxes(title_text='Age')
+    #question mark explaining the plot
+    image = Image.open("assets/question_mark_icon.png")
+    fig.add_annotation(
+        x=-0.17, y=1.22,
+        xref="paper", yref="paper",
+        text="      ",
+        # hovertext="The histogram displays the average age of death by racecolor <br>"+\
+        #             "and sex, considering the aggregated number of deaths of <br>"+\
+        #             "every five years age group by racecolor and sex, and then <br>"+\
+        #             "taking the weighted average of each group, where the weight <br>"+\
+        #             "is the percentage population of an age group in Brazil.",
+        hovertext="The histogram displays the weighted average age of death by <br>"+\
+                    "racecolor and sex, considering the aggregated number of <br>"+\
+                    "deaths of every five years age group by racecolor and sex.",
+        font=dict(size=24),
+        showarrow=False,
+    )
+    fig.add_layout_image(dict(
+        source=image,
+        xref="paper", yref="paper",
+        x=-0.17, y=1.22,
+        sizing="stretch",
+        sizex=.085, sizey=.22,
+    ))
 
     return fig
 
