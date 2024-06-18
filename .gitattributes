@@ -1,1 +1,4 @@
 data/datasus/SP_standardized_1996_2019.csv filter=lfs diff=lfs merge=lfs -text
+data/datasus/SP_standardized_1996_2022.csv filter=lfs diff=lfs merge=lfs -text
+data/datasus/RJ_standardized_1996_2022.csv filter=lfs diff=lfs merge=lfs -text
+.git/lfs/objects/cc/f6/ccf6cc68a58fa2b2851972916abe535a91253054c83b25ad82d7409f0c679051 filter=lfs diff=lfs merge=lfs -text

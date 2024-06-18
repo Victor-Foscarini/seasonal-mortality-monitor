@@ -57,9 +57,12 @@ class DataManager:
 
     def __init__(self):
     #initialize dashboard in SÃO PAULO
-        self.df = pd.read_csv(f'{data_path}datasus/SP_standardized_1996_2019.csv', index_col=0)
-        self.df['DTOBITO'] = pd.to_datetime(self.df.DTOBITO)
-        self.df['IDADE'] = self.df['IDADE'].apply(lambda x: pd.Interval(*map(int, x.strip('[]()').split(','))))
+        self.df = pd.read_csv(f'{data_path}datasus/SP_standardized_1996_2022.csv')
+        self.df = self.df.dropna() # for now, dop null values
+        self.df.CAUSE = self.df.CAUSE.str[:3] #for now, preprocess the lenght of causes here
+        self.df['DT'] = pd.to_datetime(self.df.DT)
+        self.df = self.df[self.df.DT.dt.year>=2000] #Only 2000+
+        self.df['AGE'] = self.df['AGE'].apply(lambda x: pd.Interval(*map(float, x.strip('[]()').split(','))))
         self.data = self.df.copy()
         self.city = 'São Paulo - SP'
         self.icd = icd
@@ -73,9 +76,12 @@ class DataManager:
     # 1 - Location selection
     def read_data(self, city='São Paulo - SP'):
         if not self.city==city:
-            self.df = pd.read_csv(f'{data_path}datasus/{capital_to_uf[city]}_standardized_1996_2019.csv', index_col=0)
-            self.df['DTOBITO'] = pd.to_datetime(self.df.DTOBITO)
-            self.df['IDADE'] = self.df['IDADE'].apply(lambda x: pd.Interval(*map(int, x.strip('[]()').split(','))))
+            self.df = pd.read_csv(f'{data_path}datasus/{capital_to_uf[city]}_standardized_1996_2022.csv')
+            self.df = self.df.dropna() # for now, dop null values
+            self.df.CAUSE = self.df.CAUSE.str[:3] #for now, preprocess the lenght of causes here
+            self.df['DT'] = pd.to_datetime(self.df.DT)
+            self.df = self.df[self.df.DT.dt.year>=2000] #only 2000+
+            self.df['AGE'] = self.df['AGE'].apply(lambda x: pd.Interval(*map(float, x.strip('[]()').split(','))))
             self.data = self.df.copy()
             self.city = city
             self.icd = icd
@@ -96,7 +102,7 @@ class DataManager:
             code_1lvl = np.array([selection_1lvl[x] for x in values_selected_causes_1lvl]).flatten()
             self.icd = self.icd[self.icd.code_1lvl.isin(code_1lvl)]
             selected_codes = self.icd.code_3lvl
-            self.data = self.data[self.data.CAUSABAS.isin(selected_codes)]
+            self.data = self.data[self.data.CAUSE.isin(selected_codes)]
             #update codes of lower levels - get keys (full name) from values (code)
             self.keys_selected_causes_2lvl = [list(selection_2lvl.keys())[list(selection_2lvl.values()).index(x[:7])] for x in self.icd.code_2lvl.unique()]
             self.keys_selected_causes_3lvl = [list(selection_3lvl.keys())[list(selection_3lvl.values()).index(x[:3])] for x in self.icd.code_3lvl.unique()]
@@ -108,7 +114,7 @@ class DataManager:
             code_2lvl = np.array([selection_2lvl[x] for x in values_selected_causes_2lvl]).flatten()
             self.icd = self.icd[self.icd.code_2lvl.isin(code_2lvl)]
             selected_codes = self.icd.code_3lvl
-            self.data = self.data[self.data.CAUSABAS.isin(selected_codes)]
+            self.data = self.data[self.data.CAUSE.isin(selected_codes)]
             #update codes of lower levels
             self.keys_selected_causes_3lvl = [list(selection_3lvl.keys())[list(selection_3lvl.values()).index(x[:3])] for x in self.icd.code_3lvl.unique()]
             self.select_causes_3lvl(self.keys_selected_causes_3lvl)
@@ -123,7 +129,7 @@ class DataManager:
             code_3lvl = np.array([selection_3lvl[x] for x in values_selected_causes_3lvl]).flatten()
             self.icd = self.icd[self.icd.code_3lvl.isin(code_3lvl)]
             selected_codes = self.icd.code_3lvl
-            self.data = self.data[self.data.CAUSABAS.isin(selected_codes)]
+            self.data = self.data[self.data.CAUSE.isin(selected_codes)]
         else:
             self.data = self.df.copy()
             self.select_causes_1lvl(self.values_selected_causes_1lvl)
@@ -133,15 +139,15 @@ class DataManager:
     # 3 - Age selection
     def select_ages(self, ages):
         selected_ages = [selection_age[x] for x in ages]
-        self.data = self.data[self.data.IDADE.isin(selected_ages)]
+        self.data = self.data[self.data.AGE.isin(selected_ages)]
 
     # 4 - Sex selection
     def select_sexes(self, sexes):
-        self.data = self.data[self.data.SEXO.isin(sexes)]
+        self.data = self.data[self.data.SEX.isin(sexes)]
 
     # 5 - Racecolor selection
     def select_racecolors(self, racecolors):
-        self.data = self.data[self.data.RACACOR.isin(racecolors)]
+        self.data = self.data[self.data.RACECOLOR.isin(racecolors)]
 
 locations = list(capital_to_uf.keys())
 
@@ -258,19 +264,19 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     dataManager.select_causes_1lvl(code1lvl_data)
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
-    data = dataManager.data[['DTOBITO', 'COUNT_STANDARDIZED_BR']]
-    data = data.groupby(by='DTOBITO').sum()
+    data = dataManager.data[['DT', 'DEATHS_STANDARDIZED_BR']]
+    data = data.groupby(by='DT').sum()
     data = data.resample('MS').sum()
 
     fig = go.Figure()
     #original TS
-    fig.add_trace(go.Scatter(x=data.index, y=data.COUNT_STANDARDIZED_BR, name='Original'))
+    fig.add_trace(go.Scatter(x=data.index, y=data.DEATHS_STANDARDIZED_BR, name='Original'))
     #MA-TS
     for step in np.arange(1,25,1):
       fig.add_trace(
           go.Scatter(visible=False,
                     x=data.index,
-                    y=data.COUNT_STANDARDIZED_BR.rolling(step).mean(), name='MA n='+str(step),
+                    y=data.DEATHS_STANDARDIZED_BR.rolling(step).mean(), name='MA n='+str(step),
                     line=dict(color='red', width=2, dash='dash')))
 
     #start on step-12
@@ -342,12 +348,12 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     #1lvl pieplot
     dataManager.select_causes_1lvl(code1lvl_data)
-    data = dataManager.data[['CAUSABAS', 'COUNT_STANDARDIZED_BR']][dataManager.data.CAUSABAS!='ALL'].groupby(
-            by='CAUSABAS').sum().reset_index()
-    data = data.merge(dataManager.icd[['code_3lvl','code_1lvl', 'name_1lvl']], left_on='CAUSABAS',
-                    right_on='code_3lvl').drop(columns=['CAUSABAS','code_3lvl'])
+    data = dataManager.data[['CAUSE', 'DEATHS_STANDARDIZED_BR']][dataManager.data.CAUSE!='ALL'].groupby(
+            by='CAUSE').sum().reset_index()
+    data = data.merge(dataManager.icd[['code_3lvl','code_1lvl', 'name_1lvl']], left_on='CAUSE',
+                    right_on='code_3lvl').drop(columns=['CAUSE','code_3lvl'])
     data = data.groupby(by=['code_1lvl', 'name_1lvl']).sum().reset_index()
-    data = data.rename(columns={'code_1lvl': 'Code', 'name_1lvl': 'Name', 'COUNT_STANDARDIZED_BR': 'Deaths(%)'})
+    data = data.rename(columns={'code_1lvl': 'Code', 'name_1lvl': 'Name', 'DEATHS_STANDARDIZED_BR': 'Deaths(%)'})
     data = data.sort_values(by='Deaths(%)', ascending=False)#[:n_causes]
     data['Deaths(%)'] = data['Deaths(%)']/data['Deaths(%)'].sum()
     data['Deaths(%)'] = data['Deaths(%)'].round(4)
@@ -358,12 +364,12 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     #2lvl pieplot
     dataManager.select_causes_2lvl(code2lvl_data)
-    data = dataManager.data[['CAUSABAS', 'COUNT_STANDARDIZED_BR']][dataManager.data.CAUSABAS!='ALL'].groupby(
-            by='CAUSABAS').sum().reset_index()
-    data = data.merge(dataManager.icd[['code_3lvl','code_2lvl', 'name_2lvl']], left_on='CAUSABAS',
-                  right_on='code_3lvl').drop(columns=['CAUSABAS','code_3lvl'])
+    data = dataManager.data[['CAUSE', 'DEATHS_STANDARDIZED_BR']][dataManager.data.CAUSE!='ALL'].groupby(
+            by='CAUSE').sum().reset_index()
+    data = data.merge(dataManager.icd[['code_3lvl','code_2lvl', 'name_2lvl']], left_on='CAUSE',
+                  right_on='code_3lvl').drop(columns=['CAUSE','code_3lvl'])
     data = data.groupby(by=['code_2lvl', 'name_2lvl']).sum().reset_index()
-    data = data.rename(columns={'code_2lvl': 'Code', 'name_2lvl': 'Name', 'COUNT_STANDARDIZED_BR': 'Deaths(%)'})
+    data = data.rename(columns={'code_2lvl': 'Code', 'name_2lvl': 'Name', 'DEATHS_STANDARDIZED_BR': 'Deaths(%)'})
     data = data.sort_values(by='Deaths(%)', ascending=False)#[:n_causes]
     data['Deaths(%)'] = (data['Deaths(%)']/data['Deaths(%)'].sum())#*100
     data['Deaths(%)'] = data['Deaths(%)'].round(4)
@@ -374,9 +380,9 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     #3lvl pieplot
     dataManager.select_causes_3lvl(code3lvl_data)
-    data = dataManager.data[['CAUSABAS', 'COUNT_STANDARDIZED_BR']][dataManager.data.CAUSABAS!='ALL'].groupby(
-            by='CAUSABAS').sum().reset_index()
-    data = data.merge(dataManager.icd[['code_3lvl', 'name_3lvl']], left_on='CAUSABAS', right_on='code_3lvl').drop(columns='CAUSABAS')
+    data = dataManager.data[['CAUSE', 'DEATHS_STANDARDIZED_BR']][dataManager.data.CAUSE!='ALL'].groupby(
+            by='CAUSE').sum().reset_index()
+    data = data.merge(dataManager.icd[['code_3lvl', 'name_3lvl']], left_on='CAUSE', right_on='code_3lvl').drop(columns='CAUSE')
     data.columns = ['Deaths(%)', 'Code', 'Name']
     data = data.sort_values(by='Deaths(%)', ascending=False)#[:n_causes]
     data['Deaths(%)'] = (data['Deaths(%)']/data['Deaths(%)'].sum())#*100
@@ -428,8 +434,8 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['DTOBITO', 'COUNT_STANDARDIZED_BR']]
-    data = data.groupby(by='DTOBITO').sum()
+    data = dataManager.data[['DT', 'DEATHS_STANDARDIZED_BR']]
+    data = data.groupby(by='DT').sum()
     data = data.resample('MS').sum()
 
     #plot decomposition
@@ -518,8 +524,8 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['DTOBITO', 'COUNT_STANDARDIZED_BR']]
-    data = data.groupby(by='DTOBITO').sum()
+    data = dataManager.data[['DT', 'DEATHS_STANDARDIZED_BR']]
+    data = data.groupby(by='DT').sum()
     data = data.resample('D').sum()
 
     fig = make_subplots(rows=3, cols=1,
@@ -532,7 +538,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     year_mean.index = year_mean.index.year
     fig.add_trace(go.Bar(
                     x=year_mean.index,
-                    y=year_mean.COUNT_STANDARDIZED_BR,
+                    y=year_mean.DEATHS_STANDARDIZED_BR,
                     name='year'),
                     row=1, col=1)
 
@@ -545,7 +551,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
                          'November', 'December']
     fig.add_trace(go.Bar(
                     x=month_mean.index,
-                    y=month_mean.COUNT_STANDARDIZED_BR,
+                    y=month_mean.DEATHS_STANDARDIZED_BR,
                     name='month'),
                     row=2, col=1)
 
@@ -556,7 +562,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
 
     fig.add_trace(go.Bar(
                     x=weekday_mean.index,
-                    y=weekday_mean.COUNT_STANDARDIZED_BR,
+                    y=weekday_mean.DEATHS_STANDARDIZED_BR,
                     name='weekday'),
                     row=3, col=1)
 
@@ -611,7 +617,7 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['IDADE', 'COUNT_STANDARDIZED_BR']].groupby(by='IDADE').sum()['COUNT_STANDARDIZED_BR']
+    data = dataManager.data[['AGE', 'DEATHS_STANDARDIZED_BR']].groupby(by='AGE').sum()['DEATHS_STANDARDIZED_BR']
 
     fig = px.bar(x=data.index.astype(str), y=data.values,
                  labels={'x':'Age group', 'y':'Deaths/10k'})
@@ -664,20 +670,20 @@ def update_plot(location_data, code1lvl_data, code2lvl_data, code3lvl_data):
     dataManager.select_causes_2lvl(code2lvl_data)
     dataManager.select_causes_3lvl(code3lvl_data)
 
-    data = dataManager.data[['IDADE', 'SEXO', 'RACACOR', 'COUNT_STANDARDIZED_BR']]
+    data = dataManager.data[['AGE', 'SEX', 'RACECOLOR', 'DEATHS_STANDARDIZED_BR']]
 
-    interval = data.IDADE.unique()
-    data['IDADE'] = data.IDADE.astype(str).str.extract(r'\((\d+)').astype(int)+2.5
-    data['IDADE'] = data.IDADE*data.COUNT_STANDARDIZED_BR
-    data = data.groupby(['SEXO', 'RACACOR']).agg({'IDADE':'sum', 'COUNT_STANDARDIZED_BR': 'sum'})
-    data['IDADE_MEDIA'] = data['IDADE']/data['COUNT_STANDARDIZED_BR']
-    data['IDADE_MEDIA'] = (data['IDADE_MEDIA']//5)*5
-    data['IDADE_MEDIA_INTERVALO'] = data['IDADE_MEDIA'].apply(lambda x: pd.Interval(left=x, right=x+5))
-    data['IDADE_MEDIA_INTERVALO'] = data['IDADE_MEDIA_INTERVALO'].astype(str)
-    data = data[['IDADE_MEDIA', 'IDADE_MEDIA_INTERVALO']].reset_index()
+    interval = data.AGE.unique()
+    data['AGE'] = data.AGE.astype(str).str.extract(r'\((\d+)').astype(int)+2.5
+    data['AGE'] = data.AGE*data.DEATHS_STANDARDIZED_BR
+    data = data.groupby(['SEX', 'RACECOLOR']).agg({'AGE':'sum', 'DEATHS_STANDARDIZED_BR': 'sum'})
+    data['AVERAGE_AGE'] = data['AGE']/data['DEATHS_STANDARDIZED_BR']
+    data['AVERAGE_AGE'] = (data['AVERAGE_AGE']//5)*5
+    data['AVERAGE_AGE_INTERVAL'] = data['AVERAGE_AGE'].apply(lambda x: pd.Interval(left=x, right=x+5))
+    data['AVERAGE_AGE_INTERVAL'] = data['AVERAGE_AGE_INTERVAL'].astype(str)
+    data = data[['AVERAGE_AGE', 'AVERAGE_AGE_INTERVAL']].reset_index()
 
-    data = data.rename(columns={'SEXO': 'SEX', 'RACACOR': 'RACECOLOR',
-                                'IDADE_MEDIA_INTERVALO': 'AVERAGE_AGE', 'IDADE_MEDIA':'AGE_AXIS'})
+    data = data.rename(columns={'SEX': 'SEX', 'RACECOLOR': 'RACECOLOR',
+                                'AVERAGE_AGE_INTERVAL': 'AVERAGE_AGE', 'AVERAGE_AGE':'AGE_AXIS'})
 
     data['AVERAGE_AGE'] = data['AVERAGE_AGE'].astype(str)  # Convert intervals to strings
     data['SEX'] = data['SEX'].astype(str)  # Convert intervals to strings
